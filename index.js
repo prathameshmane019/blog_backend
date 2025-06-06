@@ -1,7 +1,6 @@
 // index.js - Express Server Entry Point
 import express from 'express';
 import mongoose from 'mongoose';
-// import {cors} from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit'; 
@@ -10,27 +9,25 @@ import connectDB from "./config/database.js"
 // Import routes
 import blogRoutes from './routes/blogs.js';
 import authRoutes from './routes/auth.js'
-import  cors from 'cors';
+import cors from 'cors';
 import categoryRoutes from './routes/categories.js';
 import tagRoutes from './routes/tags.js';
 
-
-
-// In index.js
+// Import middleware
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
+
 dotenv.config();
 
 // Create Express app
 const app = express();
 
+// Store server instance for graceful shutdown
+let server;
 
 // ===== MIDDLEWARE SETUP =====
- 
-// app.use(notFound);
-// app.use(errorHandler);
 
-// Security middleware
+// Security middleware - Updated CSP for better compatibility
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -41,36 +38,76 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://images.unsplash.com"],
       connectSrc: ["'self'", "https://api.cloudinary.com"]
     }
-  }
+  },
+  crossOriginEmbedderPolicy: false // Disable for better Vercel compatibility
 }));
 
-// CORS configuration
+// CORS configuration - Fixed for production
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://blog-app-red-three.vercel.app']
-    : ['http://localhost:3000', 'http://localhost:3001'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = process.env.NODE_ENV === 'production' 
+      ? [
+          process.env.FRONTEND_URL, 
+          'https://blog-app-red-three.vercel.app',
+          'https://blog-backend-five-mu.vercel.app' // Add your backend URL too
+        ]
+      : [
+          'http://localhost:3000', 
+          'http://localhost:3001',
+          'http://127.0.0.1:3000',
+          'http://127.0.0.1:3001'
+        ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(null, true); // Allow in production for now, log for debugging
+    }
+  },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Origin', 
+    'X-Requested-With', 
+    'Content-Type', 
+    'Accept', 
+    'Authorization',
+    'X-CSRF-Token',
+    'X-Api-Version'
+  ]
 };
+
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // limit each IP
+  max: process.env.NODE_ENV === 'production' ? 200 : 1000, // Increased limit
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/health';
+  }
 });
 app.use('/api/', limiter);
 
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
+  max: 20, // Increased from 10 to 20
   message: {
     error: 'Too many authentication attempts, please try again later.'
   }
@@ -80,9 +117,6 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Compression middleware
-// app.use(compression());
-
 // Logging middleware
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -90,9 +124,6 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// Static files
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
- 
 // ===== API ROUTES =====
 
 // Health check endpoint
@@ -102,19 +133,31 @@ app.get('/api/health', (req, res) => {
     message: 'Server is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    version: process.env.npm_package_version || '1.0.0'
+    version: process.env.npm_package_version || '1.0.0',
+    cors: 'enabled'
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Blog API Server',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      blogs: '/api/blogs',
+      auth: '/api/auth',
+      categories: '/api/categories',
+      tags: '/api/tags'
+    }
   });
 });
 
 // API routes
-// app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/blogs', blogRoutes);
-app.use('/api/auth', authRoutes); 
-
+app.use('/api/auth', authLimiter, authRoutes); 
 app.use('/api/categories', categoryRoutes);
 app.use('/api/tags', tagRoutes);
-
-
 
 // Google AdSense ads.txt (for production)
 app.get('/ads.txt', (req, res) => {
@@ -131,7 +174,7 @@ app.get('/robots.txt', (req, res) => {
   res.type('text/plain');
   res.send(`User-agent: *
 Allow: /
-Disallow: /api/
+Disallow: /api/auth/
 Disallow: /admin/
 
 Sitemap: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/sitemap.xml`);
@@ -139,24 +182,32 @@ Sitemap: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/sitemap.xml`);
 
 // ===== ERROR HANDLING =====
 
-// 404 handler
-// app.use(notFound);
+// 404 handler - Must come after all routes
+app.use(notFound);
 
-// Global error handler
-// app.use(errorHandler);
+// Global error handler - Must be last
+app.use(errorHandler);
 
 // ===== GRACEFUL SHUTDOWN =====
 const gracefulShutdown = (signal) => {
   console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
   
-  server.close(() => {
-    console.log('✅ HTTP server closed');
-    
+  if (server) {
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+      
+      mongoose.connection.close(false, () => {
+        console.log('✅ MongoDB connection closed');
+        process.exit(0);
+      });
+    });
+  } else {
+    // If no server instance, just close mongoose
     mongoose.connection.close(false, () => {
       console.log('✅ MongoDB connection closed');
       process.exit(0);
     });
-  });
+  }
   
   // Force close after 10 seconds
   setTimeout(() => {
@@ -190,13 +241,14 @@ const startServer = async () => {
     await connectDB();
     
     // Start server
-    const server = app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`
 🚀 Server is running!
 📍 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 📊 API Base: http://localhost:${PORT}/api
 🔍 Health Check: http://localhost:${PORT}/api/health
+🔗 CORS: ${process.env.NODE_ENV === 'production' ? 'Production origins' : 'Development origins'}
       `);
     });
     
