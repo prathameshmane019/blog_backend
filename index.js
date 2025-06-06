@@ -46,8 +46,8 @@ app.use(helmet({
 // CORS configuration - UPDATED
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL || 'https://blog-app-red-three.vercel.app', 'https://blog-app-red-three.vercel.app']
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'],
+    ? [process.env.FRONTEND_URL ||   'https://blog-app-red-three.vercel.app']
+    : ['http://localhost:3000', 'http://localhost:3001' ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
