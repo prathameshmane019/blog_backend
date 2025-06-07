@@ -14,6 +14,7 @@ console.log(getAdminUser);
 class AuthController {
   // Login user
   static async login(req, res) {
+    
     try {
       const { email, password } = req.body;
       

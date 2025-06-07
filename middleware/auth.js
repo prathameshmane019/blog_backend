@@ -15,6 +15,7 @@ if (!JWT_SECRET) {
 // Middleware to verify JWT token
 export const authenticateToken = (req, res, next) => {
   try {
+    console.log(req.url);
     // Get token from header
     const authHeader = req.headers
     ['authorization'];

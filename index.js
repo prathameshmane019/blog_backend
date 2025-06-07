@@ -62,6 +62,7 @@ const corsOptions = {
   ],
   optionsSuccessStatus: 200
 };
+
 app.use(cors(corsOptions));
 // Rate limiting
 const limiter = rateLimit({
@@ -74,6 +75,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
 app.use('/api/', limiter);
 
 // Stricter rate limiting for auth endpoints

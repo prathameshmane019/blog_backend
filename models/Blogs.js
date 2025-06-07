@@ -8,6 +8,12 @@ const blogSchema = new mongoose.Schema({
     minlength: 3,
     maxlength: 200,
   },
+  excerpt: {
+    type: String
+  },
+  status: {
+    type: String
+  },
   slug: {
     type: String,
     required: true,
@@ -28,7 +34,7 @@ const blogSchema = new mongoose.Schema({
     },
   ],
   author: {
-    type:String,
+    type: String,
     required: true,
   },
   viewsCount: {
@@ -43,6 +49,16 @@ const blogSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  images: [
+    {
+      url: { type: String, required: true },
+      publicId: { type: String, required: true },
+      position: { type: Number, default: 0 }, // Position in content
+      altText: { type: String, default: '' }, // Alt text for accessibility
+      caption: { type: String, default: '' }, // Caption for the image
+    },
+  ],
+
   createdAt: {
     type: Date,
     default: Date.now,
